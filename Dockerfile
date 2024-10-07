@@ -26,7 +26,7 @@ EXPOSE 8080
 # Helth check
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
 
-# Create a new user
+# Create a new user 
 RUN useradd -ms /bin/bash appuser
 
 # Change ownership of the /maia directory to appuser
