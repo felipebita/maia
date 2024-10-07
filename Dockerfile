@@ -4,7 +4,7 @@ FROM ubuntu:22.04
 COPY . /maia/
 
 # Update the system and install Python
-RUN apt-get update clean all && \
+RUN apt-get update && \
     apt-get install -y python3 && \
     apt-get clean
 
