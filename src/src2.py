@@ -2,7 +2,7 @@ from PyPDF2 import PdfReader
 import tiktoken
 from langchain.text_splitter import TokenTextSplitter
 from langchain.docstore.document import Document
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain.chains.summarize import load_summarize_chain
 
 # Functions for the page:2_Text_Summarization.py.

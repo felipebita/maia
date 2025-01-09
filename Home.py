@@ -41,7 +41,8 @@ def main():
             Page("pages/1_Chat_with_Documents.py", "Chat with Documents", ":books:"),
             Page("pages/2_Text_Summarization.py", "Text Summarization", ":receipt:"),
             Page("pages/3_Image_Creation.py", "Image Creation", ":frame_with_picture:"),
-            Page("pages/4_Sentinel.py", "Sentinel", ":video_camera:")
+            Page("pages/4_Sentinel.py", "Sentinel", ":video_camera:"),
+            Page("pages/5_Agentic_Workflows.py", "Agentic Workflows", ":chains:")
         ])
         st.image("img/logo_sq.png")
         hide_img_fs = '''
