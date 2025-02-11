@@ -147,9 +147,8 @@ def main():
         if st.button("Query"):
             app = src3.create_workflow()
             query_processed = src3.process_question(query,app)
-            st.code(query_processed.values['sql'], language="sql")
             query_code = src3.extract_sql(query_processed.values['sql'])
-            print(src3.validate_and_execute_sql(query_code))
+            st.code(query_code, language="sql")
             results, column_names = src3.execute_sql_query(query_code)
             df = src3.create_dataframe(column_names, results)
             st.dataframe(df)

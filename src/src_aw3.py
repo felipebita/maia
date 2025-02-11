@@ -73,24 +73,64 @@ def search_engineer_node(state: AgentState):
 
 def senior_sql_writer_node(state: AgentState):
     role_prompt = """
-You are an SQL expert. Your task is to write **only** the SQL query that answers the user's question. 
+        You are an expert SQL developer specialized in power plant data analysis. Your task is to generate precise SQLite3 queries that analyze power generation data. You must follow these guidelines:
 
-The query must:
-- SQLite3 database
-- Use standard SQL syntax in English.
-- Always give names to the columns of the result.
-- Use the table and column names as defined in the database schema.
-- Not include comments, explanations, or any additional text.
-- Not use code formatting or markdown.
-- Return only the valid SQL query.
-"""
-    instruction = f"It is a database on powerplants production.There are **two tables** in the data base, one with the production and another with metadata. Pay atention to the names of the columns in each database.Here is the database schema:\n{state['table_schemas']}\n"
-    instruction += f"Metadata columns meaning: \n {state['metadata_description']}"
-    if len(state['reflect']) > 0:
-        instruction += f"Consider the following feedback:\n{chr(10).join(state['reflect'])}\n"
-    instruction += f"Write the SQL query that answers the following question: {state['question']}\n"
+        1. **Database Context**:
+        - Work with two interconnected tables: Production and Metadata
+        - Key join field is 'ceg_label'
+        - All temporal analysis should use 'din_instante' (Reference Date)
+        - Power generation is measured in 'val_geracao' (MWmed)
+
+        2. **Query Structure**:
+        - Start complex queries with CTEs (WITH clause) for better organization
+        - Use consistent table aliases: 'prod' for production, 'meta' for metadata
+        - Include proper table joins with explicit JOIN conditions
+        - Always specify column sources using table aliases (e.g., meta.nom_usina)
+
+        3. **Data Quality**:
+        - Handle NULL values using COALESCE(column, default_value)
+        - Prevent division by zero: NULLIF(denominator, 0)
+        - Use CASE statements for data categorization with proper END clause
+        - Round numerical results using ROUND(column, decimal_places)
+
+        4. **Performance & Readability**:
+        - Filter data early using WHERE clauses before aggregations
+        - Include only necessary columns in SELECT statements
+        - Use meaningful column aliases for calculated fields
+        - Format dates using strftime() when needed
+        - Break complex calculations into CTEs
+
+        5. **Output Requirements**:
+        - Provide only the SQL query, not any other letter, word or symbol
+        - Include no explanatory text
+        - Ensure all table/column references match schema exactly
+        - Test query logic before output
+
+        6. **Critical Checks**:
+        - Verify all column names exist in schema
+        - Confirm temporal logic is correct
+        - Validate aggregation groupings
+        - Ensure joins won't cause data multiplication
+        """
+    instruction = rf"""
+        You are analyzing a power plant production database with two tables:
+        1. Production table (ons_ts): Contains generation data (val_geracao in MWmed) 
+        2. Metadata table (ons_metadata): Contains plant information
+
+        When joining the tables, always use ceg_label variable. It is a unique identifier of the PowerPlants and its name.
+
+        Schema details:
+        {state['table_schemas']}
+
+        Column definitions:
+        {state['metadata_description']}
+
+        {("Previous feedback to incorporate:" + chr(10).join(state['reflect'])) if len(state['reflect']) > 0 else ""}
+
+        Task: Write a SQL query that answers this question: {state['question']}
+        """
     messages = [
-        SystemMessage(content=role_prompt), 
+        SystemMessage(content=role_prompt),
         HumanMessage(content=instruction)
     ]
     response = llm.invoke(messages)
@@ -99,15 +139,66 @@ The query must:
 #Função do QA Engineer
 def senior_qa_engineer_node(state: AgentState):
     role_prompt = """
-You are a QA engineer specialized in SQL. Your task is to verify if the provided SQL query correctly answers the user's question.
-"""
-    instruction = f"It is a database on powerplants production.There are two tables in the data base, one with the production and another with metadata. Here is the database schema:\n{state['table_schemas']}\n"
-    instruction += f"Metadata columns meaning: \n {state['metadata_description']}"
-    instruction += f"And the following SQL query:\n{state['sql']}\n"
-    instruction += f"Verify if the SQL query can complete the task: {state['question']}\n"
-    instruction += "Respond 'ACCEPTED' if it is correct or 'REJECTED' if it is not.\n"
+        You are a Senior QA Engineer specializing in power plant data analysis and SQL validation. Your critical role is to verify SQL queries against strict quality criteria. Follow this validation checklist:
+
+        1. **Query Structure Validation**:
+        - Verify correct JOIN conditions using 'ceg_label'
+        - Check for proper table aliases usage
+        - Validate column references match schema
+        - Confirm appropriate use of aggregation functions
+        - Verify GROUP BY includes all non-aggregated columns
+
+        2. **Data Quality Checks**:
+        - Verify NULL handling with COALESCE or similar functions
+        - Check for division by zero protection
+        - Validate date/time handling
+        - Confirm proper rounding of numerical results
+
+        3. **Business Logic Validation**:
+        - Ensure query answers ALL aspects of the question
+        - Verify correct filtering conditions
+        - Validate temporal logic when time periods are involved
+        - Check unit consistency (MWmed for power generation)
+
+        4. **Common Error Detection**:
+        - Look for data multiplication from incorrect joins
+        - Check for missing WHERE clauses
+        - Verify aggregation logic
+        - Validate calculation accuracy
+
+        Your response must be exactly 'ACCEPTED' or 'REJECTED'. Choose 'ACCEPTED' only if ALL of the following are true:
+        - Query is syntactically correct
+        - All business requirements are met
+        - Data quality checks pass
+        - No logical errors present
+
+        Choose 'REJECTED' if ANY validation fails.
+        """
+    instruction = rf"""
+        Task Context:
+        - Database: Power plant production data
+        - Tables: Production (generation data) and Metadata (plant information)
+        - Key Fields: 
+        * ceg_label (join key)
+        * val_geracao (power generation in MWmed)
+        * din_instante (reference date)
+
+        Schema Definition:
+        {state['table_schemas']}
+
+        Column Descriptions:
+        {state['metadata_description']}
+
+        Query to Validate:
+        {state['sql']}
+
+        Question to Answer:
+        {state['question']}
+
+        Validate if this query EXACTLY matches the requirements. Respond ONLY with 'ACCEPTED' or 'REJECTED'.
+        """
     messages = [
-        SystemMessage(content=role_prompt), 
+        SystemMessage(content=role_prompt),
         HumanMessage(content=instruction)
     ]
     response = llm(messages)
@@ -115,14 +206,66 @@ You are a QA engineer specialized in SQL. Your task is to verify if the provided
 
 def chief_dba_node(state: AgentState):
     role_prompt = """
-You are an experienced DBA. Your task is to provide detailed feedback to improve the provided SQL query.
-"""
-    instruction = f"It is a database on powerplants production.There are two tables in the data base, one with the production and another with metadata. Here is the database schema:\n{state['table_schemas']}\n"
-    instruction += f"Metadata columns meaning: \n {state['metadata_description']}"
-    instruction += f"And the following SQL query:\n{state['sql']}\n"
-    instruction += f"Provide useful and detailed recommendations to help improve the SQL query for the task: {state['question']}\n"
+        You are the Chief Database Administrator specializing in power plant data systems. Your crucial role is to analyze rejected SQL queries and provide clear, actionable feedback for improvements. Follow these guidelines:
+
+        1. **Analysis Framework**:
+        - First identify the primary issues preventing query acceptance
+        - Evaluate both technical correctness and business logic
+        - Consider query performance and maintainability
+        - Focus on power generation domain-specific requirements
+
+        2. **Feedback Structure**:
+        Organize your feedback into these categories:
+        a) CRITICAL ISSUES:
+            - Logic errors that affect result accuracy
+            - Incorrect joins or relationships
+            - Missing business requirements
+            - Data quality risks
+        
+        b) OPTIMIZATION SUGGESTIONS:
+            - Performance improvements
+            - Better readability
+            - More maintainable structure
+            - Error prevention
+
+        3. **Solution Guidelines**:
+        - Provide specific, actionable recommendations
+        - Reference exact parts of the query that need changes
+        - Explain WHY each change is needed
+        - Consider the power plant domain context
+
+        4. **Feedback Format**:
+        - Use concise, clear language
+        - Focus on most important issues first
+        - Provide examples where helpful
+        - Keep feedback constructive and specific
+
+        Remember: Your feedback will be used directly by the SQL Writer to improve the query. Be precise and actionable in your recommendations.
+        """
+    instruction = rf"""
+        Context:
+        - Database Purpose: Power plant production analysis
+        - Critical Fields:
+        * ceg_label: Key join field
+        * val_geracao: Power generation (MWmed)
+        * din_instante: Reference date
+
+        Database Schema:
+        {state['table_schemas']}
+
+        Column Definitions:
+        {state['metadata_description']}
+
+        Current Query:
+        {state['sql']}
+
+        Task Requirements:
+        {state['question']}
+
+        Analyze this query and provide structured feedback following the framework in your role description. Focus on making the query both technically correct and optimized for power plant data analysis.
+        """
     messages = [
-        SystemMessage(content=role_prompt), 
+        SystemMessage(content=role_prompt),
         HumanMessage(content=instruction)
     ]
     response = llm(messages)
@@ -259,17 +402,3 @@ def create_dataframe(column_names, query_results):
     # Create a DataFrame from the query results and column names
     df = pd.DataFrame(query_results, columns=column_names)
     return df
-
-def validate_and_execute_sql(query_text):
-    sql_query = extract_sql(query_text)
-    print("Extracted query:", repr(sql_query))  # For debugging
-    
-    # Basic validation
-    if not sql_query.strip():
-        raise ValueError("Empty SQL query")
-    
-    # Make sure the query ends with a semicolon
-    if not sql_query.rstrip().endswith(';'):
-        sql_query += ';'
-    cursor = load_database()
-    return cursor.execute(sql_query)
