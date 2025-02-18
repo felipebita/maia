@@ -2,6 +2,7 @@ import streamlit as st
 import src.src_aw1 as src1
 import src.src_aw2 as src2
 import src.src_aw3 as src3
+from langchain_openai import ChatOpenAI
 
 def main():
     st.set_page_config(page_title="Agentic Workflows", page_icon=":chains:")
@@ -58,10 +59,194 @@ def main():
     st.markdown(hide_img_fs, unsafe_allow_html=True)
 
     st.header("Agentic Workflows 🔄")
-    tab1, tab2, tab3 = st.tabs(["Essay Grading ", "Text Processing", "Natural Language to SQL"])
-
+    tab1, tab2, tab3 = st.tabs(["Natural Language to SQL", "Text Processing", "Essay Grading"])
 
     with tab1:
+        st.markdown(
+                """
+                <h2 style="text-align: center;">Natural Language to SQL (NL2SQL)</h2>
+                <p style="text-align: justify;">
+                    This project implements an Agentic Workflow that converts natural language queries into SQL to analyze energy generation data in Brazil. 
+                    It enables seamless interaction with a powerplant production database, making data retrieval intuitive and efficient.
+                </p>
+                <h2 style="text-align: center;">ONS Dataset</h2>
+                <p style="text-align: justify;">
+                    The <strong>National System Operator (ONS)</strong> is responsible for coordinating and overseeing the operation 
+                    of electricity generation and transmission facilities within the <strong>National Interconnected System (SIN)</strong>. 
+                    Additionally, ONS is tasked with planning the operations of isolated energy systems across the country, 
+                    operating under the supervision and regulation of the <strong>National Electric Energy Agency (ANEEL)</strong>.
+                </p>
+
+                <p style="text-align: justify;">
+                    ONS provides publicly available energy production data on its 
+                    <a href="https://dados.ons.org.br/dataset/geracao-usina-2" target="_blank">official website</a>.
+                </p>
+
+                <p style="text-align: justify;">
+                    The process of acquiring, processing, and analyzing this data is detailed in this  
+                    <a href="https://github.com/felipebita/energy_forecasting" target="_blank">forecasting project</a>, available in my portfolio.
+                </p>
+                """,
+                unsafe_allow_html=True
+            )
+
+        with st.expander("**Data Information**"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(
+                    """
+                    <style>
+                        .compact-table p { margin: 2px 0; line-height: 1.1; }
+                    </style>
+                    <div class="compact-table">
+                        <p><strong>Table:</strong> <code>ons_ts</code></p>
+                        <p><strong>Columns:</strong></p>
+                        <p><code>id</code> (INTEGER)</p>
+                        <p><code>year</code> (INTEGER)</p>
+                        <p><code>quarter</code> (INTEGER)</p>
+                        <p><code>month</code> (INTEGER)</p>
+                        <p><code>ceg_label</code> (TEXT)</p>
+                        <p><code>group</code> (TEXT)</p>
+                        <p><code>val_geracao</code> (REAL)</p>
+                    </div>
+                    """, unsafe_allow_html=True
+                )
+
+            with col2:
+                st.markdown(
+                    """
+                    <style>
+                        .compact-table p { margin: 2px 0; line-height: 1.1; }
+                    </style>
+                    <div class="compact-table">
+                        <p><strong>Table:</strong> <code>ons_metadata</code></p>
+                        <p><strong>Columns:</strong></p>
+                        <p><code>id_subsistema</code> (TEXT)</p>
+                        <p><code>nom_subsistema</code> (TEXT)</p>
+                        <p><code>id_estado</code> (TEXT)</p>
+                        <p><code>nom_estado</code> (TEXT)</p>
+                        <p><code>cod_modalidadeoperacao</code> (TEXT)</p>
+                        <p><code>nom_tipousina</code> (TEXT)</p>
+                        <p><code>nom_tipocombustivel</code> (TEXT)</p>
+                        <p><code>nom_usina</code> (TEXT)</p>
+                        <p><code>id_ons</code> (TEXT)</p>
+                        <p><code>ceg</code> (TEXT)</p>
+                        <p><code>ceg_label</code> (TEXT)</p>
+                        <p><code>group</code> (TEXT)</p>
+                    </div>
+                    """, unsafe_allow_html=True
+                )
+
+
+            st.markdown(
+                    """
+                    <div style="text-align: center; font-size: 18px; line-height: 1.2;">
+                        <p style="margin: 2px 0;"><strong>Power Generation in MWmed:</strong> <code>val_geracao</code></p>
+                        <p style="margin: 2px 0;"><strong>Unique Generation Enterprise Code:</strong> <code>ceg_label</code></p>
+                        <p style="margin: 2px 0;"><strong>Plant Subsystem:</strong> <code>id_subsistema</code></p>
+                        <p style="margin: 2px 0;"><strong>Subsystem Name:</strong> <code>nom_subsistema</code></p>
+                        <p style="margin: 2px 0;"><strong>State where the Plant is located:</strong> <code>id_estado</code></p>
+                        <p style="margin: 2px 0;"><strong>State Name:</strong> <code>nom_estado</code></p>
+                        <p style="margin: 2px 0;"><strong>Plant Operation Mode:</strong> <code>cod_modalidadeoperacao</code></p>
+                        <p style="margin: 2px 0;"><strong>Plant Type:</strong> <code>nom_tipousina</code></p>
+                        <p style="margin: 2px 0;"><strong>Fuel Type:</strong> <code>nom_tipocombustivel</code></p>
+                        <p style="margin: 2px 0;"><strong>Plant Name:</strong> <code>nom_usina</code></p>
+                        <p style="margin: 2px 0;"><strong>ONS Identifier:</strong> <code>id_ons</code></p>
+                    </div>    
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        with st.expander("**Examples**"):
+            st.markdown(
+                    """
+                    <div style="text-align: left; font-size: 18px; line-height: 1.2;">
+                        <p style="margin: 2px 0;">I want to know the mean weekly production of each powerplant in each of the years available.</p>
+                        <p style="margin: 2px 0;">I want to know the mean weekly production of each powerplant in each of the years available. Make the years as columns in the answer.</p>
+                        <p style="margin: 2px 0;">Which are the three powerplants with the highest energy production in each of the last three years? </p>
+                    </div>    
+                    """,
+                    unsafe_allow_html=True
+                )
+        model = st.radio("Choose the model", ["gpt-4o-mini", "gpt-4o"])
+
+        # Store the query input in session state to persist its value
+        if "query" not in st.session_state:
+            st.session_state.query = ""
+
+        st.session_state.query = st.text_input("What do you want to know about the Powerplants production:", value=st.session_state.query)
+
+        # Initialize other session state variables
+        if "query_run" not in st.session_state:
+            st.session_state.query_run = False
+        if "query_code" not in st.session_state:
+            st.session_state.query_code = ""
+        if "query_code_2" not in st.session_state:
+            st.session_state.query_code_2 = ""
+        if "review" not in st.session_state:
+            st.session_state.review = ""
+
+        if st.button("Get Query"):
+            llm = ChatOpenAI(model=model, temperature=0)
+            app = src3.create_workflow()
+            query_processed = src3.process_question(st.session_state.query, app, llm)
+            st.session_state.query_code = src3.extract_sql(query_processed.values['sql'])
+            st.session_state.query_code_2 = st.session_state.query_code  # Start with the generated code
+            st.session_state.query_run = True
+
+        # Display the generated query code
+        if st.session_state.query_code:
+            st.code(st.session_state.query_code, language="sql")
+
+            # Editable query area that keeps its state
+            with st.expander("Want to edit the query?"):
+                st.session_state.query_code_2 = st.text_area(
+                    "Edit your code here:", 
+                    value=st.session_state.query_code_2, 
+                    height=400
+                )
+
+        # Run the query and show the results
+        if st.session_state.query_run:
+            if st.button("Run"):
+                query_to_execute = st.session_state.query_code_2
+                results, column_names = src3.execute_sql_query(query_to_execute)
+                df = src3.create_dataframe(column_names, results)
+                st.dataframe(df)
+                st.session_state.review = True
+        if st.session_state.review:
+            with st.expander("**Is it wrong?**"):
+                user_review = st.text_area("Write here what is wrong with the result, and how it should be.",
+                    value= """Another AI agent is going to analyze the material (database, question, query and your review) and rewrite the query with an explanation.""", 
+                    height=200
+                )
+
+
+
+
+
+
+    with tab2:
+        st.markdown("""
+            ### Text Processing 
+                    
+            This workflow automates the processing of text through three sequential tasks, each powered by GPT-4o-mini for precise natural language understanding:
+            
+            Classification: Categorizes the text as News, Blog, Research, or Other.
+                    
+            Entity Extraction: Identifies entities such as Persons, Organizations, and Locations.
+                    
+            Summarization: Generates a concise summary of the text.
+            """)       
+        text = st.text_input("Insert the text:")
+        if st.button("Process"):
+            app = src2.create_workflow()
+            result = src2.process_text(app, text)
+
+            st.write(result)
+    
+
+    with tab3:
         st.markdown("""
             ### Essay Grading
 
@@ -105,57 +290,7 @@ def main():
                 app = src1.create_essay_workflow()
                 result = src1.grade_essay(app, theme, essay)
                 st.write(f"The essay has been evaluated.\n\n{result}")
-
-    with tab2:
-        st.markdown("""
-            ### Text Processing 
-                    
-            This workflow automates the processing of text through three sequential tasks, each powered by GPT-4o-mini for precise natural language understanding:
-            
-            Classification: Categorizes the text as News, Blog, Research, or Other.
-                    
-            Entity Extraction: Identifies entities such as Persons, Organizations, and Locations.
-                    
-            Summarization: Generates a concise summary of the text.
-            """)       
-        text = st.text_input("Insert the text:")
-        if st.button("Process"):
-            app = src2.create_workflow()
-            result = src2.process_text(app, text)
-
-            st.write(result)
-    
-    with tab3:
-        st.markdown("""
-        **Reference Date:** din_instante  
-        **Plant Subsystem:** id_subsistema  
-        **Subsystem Name:** nom_subsistema  
-        **State where the Plant is located:** id_estado  
-        **State Name:** nom_estado  
-        **Plant Operation Mode:** cod_modalidadeoperacao  
-        **Plant Type:** nom_tipousina  
-        **Fuel Type:** nom_tipocombustivel  
-        **Plant Name:** nom_usina  
-        **ONS Identifier:** id_ons  
-        **Unique Generation Enterprise Code:** ceg_label  
-        **Power Generation in MWmed:** val_geracao  
-        """)
-        if st.button("Get Schema"):
-            schema = src3.get_database_schema()
-            st.write(schema)
-        query = st.text_input("What do you want to know in this database:")
-        if st.button("Query"):
-            app = src3.create_workflow()
-            query_processed = src3.process_question(query,app)
-            query_code = src3.extract_sql(query_processed.values['sql'])
-            st.code(query_code, language="sql")
-            results, column_names = src3.execute_sql_query(query_code)
-            df = src3.create_dataframe(column_names, results)
-            st.dataframe(df)
-
-
-
-            
+                
     
 if __name__ == '__main__':
     main()

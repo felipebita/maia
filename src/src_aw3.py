@@ -37,9 +37,12 @@ def get_database_schema():
     conn.close()
     return schema
 
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+def initialize_model(model):
+    llm = ChatOpenAI(model=model, temperature=0)
+    return llm
 
 class AgentState(TypedDict):
+    model: Any
     question: str
     table_schemas: str
     metadata_description : str
@@ -56,7 +59,6 @@ def search_engineer_node(state: AgentState):
     state['database'] = '/databases/fs_challenge.db'
     state['metadata_description'] = """ ****metadata table variables****
                                         *** the key variable for join is *ceg_label*
-                                        Reference Date: din_instante
                                         Plant Subsystem: id_subsistema
                                         Subsystem Name: nom_subsistema
                                         State where the Plant is located: id_estado
@@ -76,10 +78,11 @@ def senior_sql_writer_node(state: AgentState):
         You are an expert SQL developer specialized in power plant data analysis. Your task is to generate precise SQLite3 queries that analyze power generation data. You must follow these guidelines:
 
         1. **Database Context**:
+        - Rementer, it is a SQLite3 database
         - Work with two interconnected tables: Production and Metadata
         - Key join field is 'ceg_label'
-        - All temporal analysis should use 'din_instante' (Reference Date)
         - Power generation is measured in 'val_geracao' (MWmed)
+        - In SQLite, GROUP is a reserved keyword. To use it as a column name, enclose it in double quotes (e.g., "group").
 
         2. **Query Structure**:
         - Start complex queries with CTEs (WITH clause) for better organization
@@ -101,6 +104,7 @@ def senior_sql_writer_node(state: AgentState):
         - Break complex calculations into CTEs
 
         5. **Output Requirements**:
+        - This code is going to be automatically run, do not use ajustable filters or anything like that
         - Provide only the SQL query, not any other letter, word or symbol
         - Include no explanatory text
         - Ensure all table/column references match schema exactly
@@ -133,6 +137,7 @@ def senior_sql_writer_node(state: AgentState):
         SystemMessage(content=role_prompt),
         HumanMessage(content=instruction)
     ]
+    llm = state['model']
     response = llm.invoke(messages)
     return {"sql": response.content.strip(), "revision": state['revision'] + 1}
 
@@ -147,6 +152,7 @@ def senior_qa_engineer_node(state: AgentState):
         - Validate column references match schema
         - Confirm appropriate use of aggregation functions
         - Verify GROUP BY includes all non-aggregated columns
+        - In SQLite, GROUP is a reserved keyword. To use it as a column name, enclose it in double quotes (e.g., "group").
 
         2. **Data Quality Checks**:
         - Verify NULL handling with COALESCE or similar functions
@@ -201,7 +207,8 @@ def senior_qa_engineer_node(state: AgentState):
         SystemMessage(content=role_prompt),
         HumanMessage(content=instruction)
     ]
-    response = llm(messages)
+    llm = state['model']
+    response = llm.invoke(messages)
     return {"accepted": 'ACCEPTED' in response.content.upper()}
 
 def chief_dba_node(state: AgentState):
@@ -268,7 +275,8 @@ def chief_dba_node(state: AgentState):
         SystemMessage(content=role_prompt),
         HumanMessage(content=instruction)
     ]
-    response = llm(messages)
+    llm = state['model']
+    response = llm.invoke(messages)
     return {"reflect": [response.content]}
 
 def create_workflow():
@@ -297,7 +305,7 @@ def create_workflow():
     return app
 
 
-def process_question(question: str, graph: Any, thread_id: str = "1") -> Dict[str, Any]:
+def process_question(question: str, graph: Any, llm:Any, thread_id: str = "1") -> Dict[str, Any]:
     """
     Processes a given question through a graph-based workflow to generate a final state.
 
@@ -314,6 +322,7 @@ def process_question(question: str, graph: Any, thread_id: str = "1") -> Dict[st
     """
     # Initialize the state with the provided question
     initial_state = {
+        'model':llm,
         'question': question,
         'table_schemas': '',  # Will be populated by 'search_engineer_node'
         'database': '',       # Will be populated by 'search_engineer_node'
