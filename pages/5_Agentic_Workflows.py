@@ -212,15 +212,24 @@ def main():
                 query_to_execute = st.session_state.query_code_2
                 results, column_names = src3.execute_sql_query(query_to_execute)
                 df = src3.create_dataframe(column_names, results)
-                st.dataframe(df)
+                st.session_state.result_df = df
                 st.session_state.review = True
+    
+            # Display the dataframe if it exists in session state
+            if 'result_df' in st.session_state:
+                st.dataframe(st.session_state.result_df)
+
         if st.session_state.review:
             with st.expander("**Is it wrong?**"):
                 user_review = st.text_area("Write here what is wrong with the result, and how it should be.",
                     value= """Another AI agent is going to analyze the material (database, question, query and your review) and rewrite the query with an explanation.""", 
                     height=200
                 )
-
+            if st.button("Review"):
+                review_response = src3.review_query_results(user_review, st.session_state.query_code, user_review)
+                st.markdown(review_response['analysis'])
+                st.markdown(review_response['explanation'])
+                st.code(review_response['explanation'], language="sql")
 
 
 
