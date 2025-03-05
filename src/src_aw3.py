@@ -4,10 +4,9 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langchain.schema import SystemMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
-from typing import TypedDict, Tuple, Optional, List, Dict, Any
+from typing import TypedDict, Tuple, Optional, List, Dict, Any, Union
 import os
 import re
-import logging
 
 def load_database():
     app_root = os.path.dirname(os.path.dirname(__file__))  # Go up one level from src folder
@@ -41,7 +40,7 @@ def initialize_model(model):
     llm = ChatOpenAI(model=model, temperature=0)
     return llm
 
-class AgentState(TypedDict):
+class AgentStateSQL(TypedDict):
     model: Any
     question: str
     table_schemas: str
@@ -53,7 +52,7 @@ class AgentState(TypedDict):
     revision: int
     max_revision: int
 
-def search_engineer_node(state: AgentState):
+def search_engineer_node(state: AgentStateSQL):
     # Fornecemos o esquema do banco de dados diretamente
     state['table_schemas'] = get_database_schema()
     state['database'] = '/databases/fs_challenge.db'
@@ -73,7 +72,7 @@ def search_engineer_node(state: AgentState):
                                         """
     return {"table_schemas": state['table_schemas'], "database": state['database'],"metadata_description": state['metadata_description']}
 
-def senior_sql_writer_node(state: AgentState):
+def senior_sql_writer_node(state: AgentStateSQL):
     role_prompt = """
         You are an expert SQL developer specialized in power plant data analysis. Your task is to generate precise SQLite3 queries that analyze power generation data. You must follow these guidelines:
 
@@ -142,7 +141,7 @@ def senior_sql_writer_node(state: AgentState):
     return {"sql": response.content.strip(), "revision": state['revision'] + 1}
 
 #Função do QA Engineer
-def senior_qa_engineer_node(state: AgentState):
+def senior_qa_engineer_node(state: AgentStateSQL):
     role_prompt = """
         You are a Senior QA Engineer specializing in power plant data analysis and SQL validation. Your critical role is to verify SQL queries against strict quality criteria. Follow this validation checklist:
 
@@ -211,7 +210,7 @@ def senior_qa_engineer_node(state: AgentState):
     response = llm.invoke(messages)
     return {"accepted": 'ACCEPTED' in response.content.upper()}
 
-def chief_dba_node(state: AgentState):
+def chief_dba_node(state: AgentStateSQL):
     role_prompt = """
         You are the Chief Database Administrator specializing in power plant data systems. Your crucial role is to analyze rejected SQL queries and provide clear, actionable feedback for improvements. Follow these guidelines:
 
@@ -280,7 +279,7 @@ def chief_dba_node(state: AgentState):
     return {"reflect": [response.content]}
 
 def create_workflow():
-    builder = StateGraph(AgentState)
+    builder = StateGraph(AgentStateSQL)
 
     builder.add_node("search_engineer", search_engineer_node)
     builder.add_node("sql_writer", senior_sql_writer_node)
@@ -359,7 +358,7 @@ def extract_sql(query_text):
     return query_text.strip()
 
 
-def execute_sql_query(sql_query: str) -> Optional[Tuple[List[Tuple], List[str]]]:
+def execute_sql_query(sql_query: str) -> Union[Tuple[List[Tuple], List[str]], str, None]:  # Changed return type
     """
     Executes an SQL query using the provided database cursor and returns the results.
 
@@ -367,34 +366,26 @@ def execute_sql_query(sql_query: str) -> Optional[Tuple[List[Tuple], List[str]]]
         sql_query (str): The SQL query to be executed.
 
     Returns:
-        Optional[Tuple[List[Tuple], List[str]]]: A tuple containing the query results and column names if successful, 
-        or None if an error occurs.
+        Union[Tuple[List[Tuple], List[str]], str, None]: A tuple containing the query results and column names if successful,
+        the error message as a string if an error occurs, or None if the connection fails.
     """
+    conn = None  # Initialize conn to None
     try:
         cursor = load_database()
-        if not cursor:
-            logging.error("Failed to create a database cursor.")
-            return None
-
         # Execute the SQL query
         cursor.execute(sql_query)
-        
         # Fetch all results
         results = cursor.fetchall()
         # Get column names from cursor.description
         column_names = [desc[0] for desc in cursor.description]
 
-        # Log the results for debugging purposes
-        logging.info("SQL query executed successfully.")
-        logging.debug(f"Query results: {results}")
-        logging.debug(f"Column names: {column_names}")
-        
         return results, column_names
-    
-    except Exception as e:
-        # Log the error and print a user-friendly message
-        logging.error(f"Error executing SQL query: {e}")
-        print("Error executing SQL query. Please check the logs for more details.")
+
+    except sqlite3.Error as e:  # Catch specific database errors
+        return str(e)  # Return the error message as a string
+
+    except sqlite3.OperationalError as e:
+        print(f"Error connecting to the database: {e}")
         return None
 
 def create_dataframe(column_names, query_results):
@@ -413,7 +404,7 @@ def create_dataframe(column_names, query_results):
     return df
 
 
-def review_query_results(user_request, sql_query, user_review):
+def review_query_results(schema, user_request, sql_query, user_review):
     """
     Function to analyze the original request, SQL query, and user review using GPT
     
@@ -429,34 +420,54 @@ def review_query_results(user_request, sql_query, user_review):
     
     # Create the system prompt
     system_prompt = """You are an expert SQL developer. Your task is to analyze:
-    1. The original user request for data
-    2. The SQL query that was generated
-    3. The user's review explaining why the results weren't what they expected
+        1. The original user request for data
+        2. The SQL query that was generated
+        3. The user's review explaining why the results weren't what they expected
+
+        Based on this analysis, you should:
+        1. Understand what went wrong with the original query
+        2. Create a new SQL query that better matches the user's intentions
+        3. Explain why the new query better addresses the user's needs
+
+        YOU MUST RETURN YOUR RESPONSE IN THIS EXACT FORMAT WITH ALL THREE SECTIONS:
+        ANALYSIS: Your detailed analysis of what went wrong with the original query
+        NEW_QUERY: Your revised SQL query without any markdown formatting
+        EXPLANATION: Your detailed explanation of why the new query better matches the user's needs"""
     
-    Based on this analysis, you should:
-    1. Understand what went wrong with the original query
-    2. Create a new SQL query that better matches the user's intentions
-    3. Explain why the new query better addresses the user's needs
-    
-    Return your response in this format:
-    ANALYSIS: Your analysis of what went wrong
-    NEW_QUERY: Your revised SQL query
-    EXPLANATION: Why the new query better matches the user's needs"""
-    
+    metadata = """ ****metadata table variables****
+                *** the key variable for join is *ceg_label*
+                Plant Subsystem: id_subsistema
+                Subsystem Name: nom_subsistema
+                State where the Plant is located: id_estado
+                State Name: nom_estado
+                Plant Operation Mode: cod_modalidadeoperacao
+                Plant Type: nom_tipousina
+                Fuel Type: nom_tipocombustivel
+                Plant Name: nom_usina
+                ONS Identifier: id_ons
+                Unique Generation Enterprise Code: ceg_label
+                Power Generation in MWmed: val_geracao
+                """
     # Create the human message template
     human_template = """
+    SCHEMA: {schema}
+
+    METADATA: {metadata}
+
     ORIGINAL REQUEST: {user_request}
     
     GENERATED SQL QUERY: {sql_query}
     
     USER REVIEW: {user_review}
     
-    Please analyze these and provide a better SQL query that addresses the user's needs."""
+    Analyze these and provide a better SQL query that addresses the user's needs."""
     
     # Create messages
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=human_template.format(
+            schema = schema,
+            metadata = metadata,
             user_request=user_request,
             sql_query=sql_query,
             user_review=user_review
@@ -468,30 +479,25 @@ def review_query_results(user_request, sql_query, user_review):
     
     # Parse the response
     response_text = response.content
+      
+    # Define regex patterns for each section
+    analysis_pattern = re.compile(r"ANALYSIS:\s*(.*?)(?=NEW_QUERY:|NEW QUERY:|$)", re.DOTALL | re.IGNORECASE)
+    query_pattern = re.compile(r"NEW_QUERY:\s*(.*?)(?=EXPLANATION:|$)", re.DOTALL | re.IGNORECASE)
+    explanation_pattern = re.compile(r"EXPLANATION:\s*(.*?)$", re.DOTALL | re.IGNORECASE)
     
-    # Split the response into sections
+    # Extract sections
     sections = {}
-    current_section = None
-    current_content = []
     
-    for line in response_text.split('\n'):
-        if line.startswith('ANALYSIS:'):
-            current_section = 'analysis'
-            current_content = []
-        elif line.startswith('NEW_QUERY:'):
-            if current_section:
-                sections[current_section] = '\n'.join(current_content).strip()
-            current_section = 'new_query'
-            current_content = []
-        elif line.startswith('EXPLANATION:'):
-            if current_section:
-                sections[current_section] = '\n'.join(current_content).strip()
-            current_section = 'explanation'
-            current_content = []
-        elif line.strip():
-            current_content.append(line.strip())
+    # Extract analysis
+    analysis_match = analysis_pattern.search(response_text)
+    sections['analysis'] = analysis_match.group(1).strip() if analysis_match else "Analysis section could not be parsed from the response"
     
-    if current_section:
-        sections[current_section] = '\n'.join(current_content).strip()
+    # Extract query
+    query_match = query_pattern.search(response_text)
+    sections['new_query'] = query_match.group(1).strip() if query_match else "New query section could not be parsed from the response"
+    
+    # Extract explanation
+    explanation_match = explanation_pattern.search(response_text)
+    sections['explanation'] = explanation_match.group(1).strip() if explanation_match else "Explanation section could not be parsed from the response"
     
     return sections

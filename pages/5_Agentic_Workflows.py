@@ -161,8 +161,10 @@ def main():
             st.markdown(
                     """
                     <div style="text-align: left; font-size: 18px; line-height: 1.2;">
-                        <p style="margin: 2px 0;">I want to know the mean weekly production of each powerplant in each of the years available.</p>
-                        <p style="margin: 2px 0;">I want to know the mean weekly production of each powerplant in each of the years available. Make the years as columns in the answer.</p>
+                        <p style="margin: 2px 0;">Which are the powerplants in the dataset?</p>
+                        <p style="margin: 2px 0;">What is the total production of each powerplant?</p>
+                        <p style="margin: 2px 0;">I want to know the mean monthly production of each powerplant in each of the years available.</p>
+                        <p style="margin: 2px 0;">I want to know the mean monthly production of each powerplant in each of the years available. Make the years as columns in the answer.</p>
                         <p style="margin: 2px 0;">Which are the three powerplants with the highest energy production in each of the last three years? </p>
                     </div>    
                     """,
@@ -174,62 +176,86 @@ def main():
         if "query" not in st.session_state:
             st.session_state.query = ""
 
-        st.session_state.query = st.text_input("What do you want to know about the Powerplants production:", value=st.session_state.query)
+        st.session_state.query = st.text_area("What do you want to know about the Powerplants production:", value=st.session_state.query)
 
         # Initialize other session state variables
         if "query_run" not in st.session_state:
             st.session_state.query_run = False
         if "query_code" not in st.session_state:
             st.session_state.query_code = ""
-        if "query_code_2" not in st.session_state:
-            st.session_state.query_code_2 = ""
         if "review" not in st.session_state:
-            st.session_state.review = ""
+            st.session_state.review = False
+        if "query_text" not in st.session_state:
+            st.session_state.query_text = ""
+        if "review_expander_open" not in st.session_state:
+            st.session_state.review_expander_open = False
 
         if st.button("Get Query"):
             llm = ChatOpenAI(model=model, temperature=0)
             app = src3.create_workflow()
             query_processed = src3.process_question(st.session_state.query, app, llm)
             st.session_state.query_code = src3.extract_sql(query_processed.values['sql'])
-            st.session_state.query_code_2 = st.session_state.query_code  # Start with the generated code
             st.session_state.query_run = True
 
         # Display the generated query code
         if st.session_state.query_code:
-            st.code(st.session_state.query_code, language="sql")
+            with st.expander("Query"):
+                st.code(st.session_state.query_code, language="sql")
 
-            # Editable query area that keeps its state
-            with st.expander("Want to edit the query?"):
-                st.session_state.query_code_2 = st.text_area(
-                    "Edit your code here:", 
-                    value=st.session_state.query_code_2, 
-                    height=400
-                )
+        if st.session_state.query_run:
+            st.session_state.query_text = st.text_area(
+                        "Enter your SQL code here:", 
+                        value=st.session_state.query_code, 
+                        height=400
+                    )
+        elif "review_response" in st.session_state:
+            st.session_state.query_text = st.text_area(
+                        "Enter your SQL code here:", 
+                        value = st.session_state.review_response.get('new_query', 'New query not found'), 
+                        height=400
+                    )
+        else:
+            st.session_state.query_text = st.text_area(
+                        "Enter your SQL code here:", 
+                        height=400
+                    )
 
         # Run the query and show the results
-        if st.session_state.query_run:
+        if st.session_state.query_text:
             if st.button("Run"):
-                query_to_execute = st.session_state.query_code_2
-                results, column_names = src3.execute_sql_query(query_to_execute)
-                df = src3.create_dataframe(column_names, results)
-                st.session_state.result_df = df
-                st.session_state.review = True
-    
-            # Display the dataframe if it exists in session state
-            if 'result_df' in st.session_state:
-                st.dataframe(st.session_state.result_df)
+                query_to_execute = st.session_state.query_text
+                result = src3.execute_sql_query(query_to_execute)
+                if isinstance(result, tuple):
+                    results, column_names = result
+                    df = src3.create_dataframe(column_names, results)
+                    st.session_state.result_df = df
+                    st.session_state.review = True
+                    if 'result_df' in st.session_state:
+                        st.dataframe(st.session_state.result_df)
+                elif isinstance(result, str):
+                    st.error(f"SQL Query Error: {result}")
+                else:
+                    st.error("Failed to connect to the database. Check the console for details.")
 
-        if st.session_state.review:
-            with st.expander("**Is it wrong?**"):
-                user_review = st.text_area("Write here what is wrong with the result, and how it should be.",
-                    value= """Another AI agent is going to analyze the material (database, question, query and your review) and rewrite the query with an explanation.""", 
-                    height=200
-                )
-            if st.button("Review"):
-                review_response = src3.review_query_results(user_review, st.session_state.query_code, user_review)
-                st.markdown(review_response['analysis'])
-                st.markdown(review_response['explanation'])
-                st.code(review_response['explanation'], language="sql")
+            if st.session_state.review:
+                user_review = st.text_area(
+                        "Write here what is wrong with the result or how do you actually want it",
+                        value="""Another AI agent is going to analyze the material (database, question, query and your review) and rewrite the query with an explanation.""",
+                        height=64)
+                if st.button("Review"):
+                    st.session_state.review_response = src3.review_query_results(
+                        src3.get_database_schema(),
+                        st.session_state.query,
+                        st.session_state.query_text,
+                        user_review)    
+                    with st.expander("Is it wrong or needs changes?", expanded=st.session_state.get("review_expander_open", True)):
+                        st.markdown(st.session_state.review_response.get("analysis", "Analysis section not found"))
+                        st.markdown(st.session_state.review_response.get("explanation", "Explanation section not found"))
+                        st.markdown("Copy the code below and paste in the Edit Query expander")
+                        st.code(st.session_state.review_response.get("new_query", "New query not found"), language="sql")
+
+                    
+  
 
 
 
