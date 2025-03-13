@@ -5,10 +5,57 @@ import src.src1 as src
 def main():
     load_dotenv()
     st.set_page_config(page_title="Chat with Documents", page_icon=":books:")
-    with st.sidebar:
-        st.image("img/logo_sq.png")
-        st.markdown("This is a portfolio project by Felipe Martins. If you want to see the code of this app and other data science projects check my [GitHub](https://github.com/felipebita).")
-        st.markdown("This is just an example tool. Please, do not abuse on my OpenAI credits, use it only for testing purposes.")
+    st.markdown("""
+        <style>
+            #MainMenu {visibility: hidden;}
+            div[data-testid="stSidebarNav"] {display: none;}
+        </style>
+        """, unsafe_allow_html=True)
+    
+    st.sidebar.image("img/logo_sq.png")
+
+    # Create the sidebar navigation
+    pages = {
+    "🏠 Home": "Home.py",
+    "📚 Chat with Documents": "pages/1_Chat_with_Documents.py",
+    "📝 Text Summarization": "pages/2_Text_Summarization.py",
+    "🖼️ Image Creation": "pages/3_Image_Creation.py",
+    "📹 Sentinel": "pages/4_Sentinel.py",
+    "🔄 Agentic Workflows": "pages/5_Agentic_Workflows.py"
+    }
+
+    # Add some styling to make the sidebar links more visible
+    st.markdown(
+    """
+    <style>
+    .css-1d391kg {
+        padding-top: 0rem;
+    }
+    .css-1d391kg a {
+        text-decoration: none;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+    )
+
+    # Create links for each page
+    for page_name, page_path in pages.items():
+        st.sidebar.page_link(page_path, label=page_name)
+
+    # Add the messages in the sidebar
+    st.sidebar.markdown("---")  # This adds a horizontal line for separation
+    st.sidebar.markdown("This is a portfolio project by Felipe Martins. If you want to see the code of this app and other data science projects check my [GitHub](https://github.com/felipebita).")
+    st.sidebar.markdown("This is just an example tool. Please, do not abuse on my OpenAI credits, use it only for testing purposes.")
+
+    # Hide fullscreen button for image
+    hide_img_fs = '''
+    <style>
+    button[title="View fullscreen"]{
+        visibility: hidden;}
+    </style>
+    '''
+    st.markdown(hide_img_fs, unsafe_allow_html=True)
 
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
