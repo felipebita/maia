@@ -7,6 +7,9 @@ from langgraph.checkpoint.memory import MemorySaver
 from typing import TypedDict, Tuple, Optional, List, Dict, Any, Union
 import os
 import re
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def load_database():
     app_root = os.path.dirname(os.path.dirname(__file__))  # Go up one level from src folder
@@ -53,7 +56,6 @@ class AgentStateSQL(TypedDict):
     max_revision: int
 
 def search_engineer_node(state: AgentStateSQL):
-    # Fornecemos o esquema do banco de dados diretamente
     state['table_schemas'] = get_database_schema()
     state['database'] = '/databases/fs_challenge.db'
     state['metadata_description'] = """ ****metadata table variables****
@@ -278,7 +280,7 @@ def chief_dba_node(state: AgentStateSQL):
     response = llm.invoke(messages)
     return {"reflect": [response.content]}
 
-def create_workflow():
+def create_workflow_sql():
     builder = StateGraph(AgentStateSQL)
 
     builder.add_node("search_engineer", search_engineer_node)
@@ -302,7 +304,6 @@ def create_workflow():
 
     app = builder.compile(checkpointer=memory)
     return app
-
 
 def process_question(question: str, graph: Any, llm:Any, thread_id: str = "1") -> Dict[str, Any]:
     """
@@ -369,7 +370,6 @@ def execute_sql_query(sql_query: str) -> Union[Tuple[List[Tuple], List[str]], st
         Union[Tuple[List[Tuple], List[str]], str, None]: A tuple containing the query results and column names if successful,
         the error message as a string if an error occurs, or None if the connection fails.
     """
-    conn = None  # Initialize conn to None
     try:
         cursor = load_database()
         # Execute the SQL query
@@ -501,3 +501,278 @@ def review_query_results(schema, user_request, sql_query, user_review):
     sections['explanation'] = explanation_match.group(1).strip() if explanation_match else "Explanation section could not be parsed from the response"
     
     return sections
+
+class AgentStateViz(TypedDict):
+    model: Any
+    user_query: str
+    sql: str
+    user_viz: str
+    data: str
+    manager_guide: str
+    code: str
+
+def viz_manager_node(state: AgentStateViz):
+    role_prompt = """
+        You are a Data Visualization Manager specializing in converting SQL query results into effective visualizations. Your role is to analyze user requests and data samples to create clear specifications for the Code Specialist.
+        Your Tasks:
+        Visualization Selection:
+        Determine the most appropriate chart type based on data structure and question
+        Consider relationships, comparisons, distributions, or trends being explored
+        Select appropriate visualization library (ATTENTION: only matplotlib or seaborn)
+
+        Data Mapping:
+        Identify which columns should be used for x-axis, y-axis, color, size, etc.
+        Recommend any necessary data transformations
+        Specify how to handle outliers or missing values
+
+        Design Elements:
+        Suggest appropriate title, labels, and annotations
+        Recommend color schemes that enhance data readability
+        Specify formatting for axes, legends, and other elements
+
+        Implementation Guidance:
+        Provide clear direction on how to implement the visualization
+        Highlight any special considerations for the data structure
+        Suggest any interactive elements if appropriate
+
+        Your output must contain exactly these sections:
+        Chart Type: Single sentence specifying the visualization type
+        Data Mapping: Brief list of which columns map to which visual elements
+        Design Elements: Concise specifications for titles, labels, and formatting
+        Implementation Notes: Any special considerations for the Code Specialist
+
+        Keep your response focused and practical. Your goal is to provide clear direction that allows the Code Specialist to implement the visualization without making design decisions.
+        """
+    instruction = rf"""
+        Context:
+        - Database Purpose: Power plant production analysis
+        - Pay attention to the User viz request!
+            *If it is "Write here what kind of data viz you want or let the AI Agent decide." or a non-sense message. It is your task to decide which is the best data viz for the data.*
+        
+        User query:
+        {state['user_query']}
+
+        SQL code:
+        {state['sql']}
+
+        User viz request:
+        {state['user_viz']}
+
+        Data Information:
+        {state['data']}
+        """
+    messages = [
+        SystemMessage(content=role_prompt),
+        HumanMessage(content=instruction)
+    ]
+    llm = state['model']
+    response = llm.invoke(messages)
+    return {"manager_guide": [response.content]}
+
+def viz_coder_node(state: AgentStateViz):
+    role_prompt = """
+        You are a Python Data Visualization Code Specialist. Your sole purpose is to implement visualization code based on specifications from the Data Visualization Manager.
+        Your Tasks:
+
+        Interpret Specifications:
+        Read and understand the visualization requirements
+        Follow the Chart Type, Data Mapping, Design Elements, and Implementation Notes exactly
+        Do not deviate from the specifications provided
+
+        Write Clean, Efficient Code:
+        Use Python with visualization libraries as specified (ATTENTION: only matplotlib or seaborn)
+        Write production-quality code with proper variable names and comments
+        Include all necessary imports
+        Structure code logically with clear data processing and visualization sections
+
+        Handle Data Properly:
+        Implement any required data transformations
+        Handle NULL values, outliers, and edge cases appropriately
+        Ensure code works with the provided DataFrame structure
+
+        Format Output Correctly:
+        Return ONLY Python code inside triple quotes (```)
+        Include ALL necessary code to produce the visualization
+        Ensure the code is complete and ready to run
+
+        Response Format:
+        You must respond ONLY with Python code inside triple quotes. Do not include explanations, comments outside the code, or any other text. Your entire response should look like this:
+        ```
+        # Imports
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        # (rest of the code)
+
+        # Your implementation here
+        ```
+        Do not ask questions or provide alternatives. Simply implement the visualization exactly as specified by the Data Visualization Manager. Your code should assume the DataFrame is already available in the variable df.
+        """
+    instruction = rf"""
+        Context:
+        - Database Purpose: Power plant production analysis
+
+        User query:
+        {state['user_query']}
+
+        SQL code:
+        {state['sql']}
+
+        User viz request:
+        {state['user_viz']}
+
+        Data Information:
+        {state['data']}
+
+        Data Visualization Manager Request:
+        {state['manager_guide']}
+        """
+    messages = [
+        SystemMessage(content=role_prompt),
+        HumanMessage(content=instruction)
+    ]
+    llm = state['model']
+    response = llm.invoke(messages)
+    return {"code": [response.content]}
+
+def create_workflow_viz():
+    builder = StateGraph(AgentStateViz)
+
+    builder.add_node("viz_manager", viz_manager_node)
+    builder.add_node("viz_coder", viz_coder_node)
+
+    builder.add_edge("viz_manager", "viz_coder")
+
+    memory = MemorySaver()
+
+    builder.set_entry_point("viz_manager")
+
+    app = builder.compile(checkpointer=memory)
+    return app
+
+def format_df(df, max_sample_rows=3):
+    """
+    Creates a simple, standardized representation of a DataFrame for a visualization agent.
+    
+    Args:
+        df: The pandas DataFrame to format
+        sql_query: The SQL query that generated the data (optional)
+        user_question: The original user question/request (optional)
+        max_sample_rows: Maximum number of sample rows to include
+    
+    Returns:
+        A formatted string with the DataFrame information
+    """
+    # Basic shape information
+    df_info = f"DataFrame: {df.shape[0]} rows × {df.shape[1]} columns\n\n"
+    
+    # Column names and types
+    df_info += "Columns:\n"
+    for col, dtype in zip(df.columns, df.dtypes):
+        df_info += f"- {col} ({dtype})\n"
+    df_info += "\n"
+    
+    # Sample data (first few rows)
+    sample_rows = min(max_sample_rows, df.shape[0])
+    df_info += f"Data Sample ({sample_rows} rows):\n"
+    df_info += df.head(sample_rows).to_string()
+    
+    return df_info
+
+def process_viz(question: str, graph: Any, llm:Any, sql: str, user_viz: str, data: str, thread_id: str = "1") -> Dict[str, Any]:
+    """
+    Processes a given question through a graph-based workflow to generate a final state.
+
+    This function initializes the state with the provided question, streams it through the graph,
+    and returns the final state after processing.
+
+    Args:
+        question (str): The question to be processed.
+        graph (Any): The graph object that processes the state.
+        thread_id (str, optional): The ID of the thread for processing. Defaults to "1".
+
+    Returns:
+        Dict[str, Any]: The final state after processing the question through the graph.
+    """
+    # Initialize the state with the provided question
+    initial_state = {
+    'model': llm,
+    'user_query': question,
+    'sql': sql,
+    'user_viz': user_viz,
+    'data': data,
+    'manager_guide': "",
+    'code': ""
+    }
+
+     # Configure the thread
+    thread = {"configurable": {"thread_id": thread_id}}
+
+    # Stream the initial state through the graph
+    for _ in graph.stream(initial_state, thread):
+        pass  # Processing is handled internally by the graph
+
+    # Retrieve and return the final state
+    final_state = graph.get_state(thread)
+    return final_state
+
+def get_clean_viz_code(final_state) -> str:
+    """
+    Extract and clean visualization code from the agent's final state.
+    
+    Parameters
+    ----------
+    final_state : StateSnapshot or dict
+        The final state returned by the visualization agent workflow
+        
+    Returns
+    -------
+    str
+        The cleaned visualization code ready for execution
+        
+    Raises
+    ------
+    ValueError
+        If no code is found in the final state
+    """
+    # Handle StateSnapshot objects from LangGraph
+    try:
+        # Try accessing as a StateSnapshot object
+        if hasattr(final_state, 'values'):
+            code_content = final_state.values.get('code')
+        # Try accessing as a direct attribute
+        elif hasattr(final_state, 'code'):
+            code_content = final_state.code
+        # Try dictionary access
+        else:
+            code_content = final_state.get('code')
+    except:
+        # Fallback to dict access
+        try:
+            code_content = final_state['code']
+        except (TypeError, KeyError):
+            raise ValueError("Cannot extract code from state object. Unsupported state format.")
+    
+    # Check if code content exists
+    if not code_content:
+        raise ValueError("No visualization code was generated in the agent output.")
+    
+    # Handle list format
+    if isinstance(code_content, list):
+        code_content = code_content[0]
+        
+    # Clean up code by removing markdown code blocks if present
+    code = code_content.strip()
+    
+    # Remove Python markdown indicators if present
+    if code.startswith("```python"):
+        code = code[10:]
+    elif code.startswith("```"):
+        code = code[3:]
+        
+    if code.endswith("```"):
+        code = code[:-3]
+    
+    # Return the clean code
+    # Remove plt.show() from the code before execution
+    code = code.replace("plt.show()", "# plt.show() removed for Streamlit compatibility")
+    return code.strip()

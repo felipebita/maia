@@ -1,8 +1,14 @@
 import streamlit as st
+from streamlit_ace import st_ace
 import src.src_aw1 as src1
 import src.src_aw2 as src2
 import src.src_aw3 as src3
 from langchain_openai import ChatOpenAI
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import plotly.express as px
 
 def main():
     st.set_page_config(page_title="Agentic Workflows", page_icon=":chains:")
@@ -189,71 +195,127 @@ def main():
             st.session_state.query_text = ""
         if "review_expander_open" not in st.session_state:
             st.session_state.review_expander_open = False
+        if 'df' not in st.session_state:
+            st.session_state.df = None
+        if 'review_response' not in st.session_state:
+            st.session_state.review_response = ""
 
         if st.button("Get Query"):
-            llm = ChatOpenAI(model=model, temperature=0)
-            app = src3.create_workflow()
-            query_processed = src3.process_question(st.session_state.query, app, llm)
+            st.session_state.llm = ChatOpenAI(model=model, temperature=0)
+            app = src3.create_workflow_sql()
+            query_processed = src3.process_question(st.session_state.query, app, st.session_state.llm)
             st.session_state.query_code = src3.extract_sql(query_processed.values['sql'])
             st.session_state.query_run = True
 
-        # Display the generated query code
-        if st.session_state.query_code:
-            with st.expander("Query"):
-                st.code(st.session_state.query_code, language="sql")
+        if st.session_state.query_run == True:
+            st.session_state.query_text = st_ace(
+                value=st.session_state.query_code,  
+                language="sql",  
+                theme="github",  
+                font_size=14,  
+                height=400,  
+                show_gutter=True,  
+                wrap=True,  
+            )
 
-        if st.session_state.query_run:
-            st.session_state.query_text = st.text_area(
-                        "Enter your SQL code here:", 
-                        value=st.session_state.query_code, 
-                        height=400
-                    )
-        elif "review_response" in st.session_state:
-            st.session_state.query_text = st.text_area(
-                        "Enter your SQL code here:", 
-                        value = st.session_state.review_response.get('new_query', 'New query not found'), 
-                        height=400
-                    )
+        elif st.session_state.review_response:
+            st.session_state.query_text = st_ace(
+                value= st.session_state.review_response.get("new_query", "New query not found"),  
+                language="sql",  
+                theme="github",  
+                font_size=14,  
+                height=400,  
+                show_gutter=True,  
+                wrap=True 
+            )
         else:
-            st.session_state.query_text = st.text_area(
-                        "Enter your SQL code here:", 
-                        height=400
-                    )
+            st.session_state.query_text = st_ace(
+                value=st.session_state.query_code,  
+                language="sql",  
+                theme="github",  
+                font_size=14,  
+                height=400,  
+                show_gutter=True,  
+                wrap=True 
+            )
 
         # Run the query and show the results
         if st.session_state.query_text:
             if st.button("Run"):
                 query_to_execute = st.session_state.query_text
                 result = src3.execute_sql_query(query_to_execute)
+
                 if isinstance(result, tuple):
                     results, column_names = result
-                    df = src3.create_dataframe(column_names, results)
-                    st.session_state.result_df = df
-                    st.session_state.review = True
-                    if 'result_df' in st.session_state:
-                        st.dataframe(st.session_state.result_df)
+                    st.session_state.df = src3.create_dataframe(column_names, results)
+                    st.session_state.review = True  # Update session state BEFORE rerunning
+                    st.rerun()  # Restart execution to reflect changes instantly
                 elif isinstance(result, str):
                     st.error(f"SQL Query Error: {result}")
                 else:
                     st.error("Failed to connect to the database. Check the console for details.")
 
+        # Always display DataFrame if available
+        if 'df' in st.session_state and st.session_state.df is not None:
+            st.dataframe(st.session_state.df)
+
             if st.session_state.review:
-                user_review = st.text_area(
-                        "Write here what is wrong with the result or how do you actually want it",
-                        value="""Another AI agent is going to analyze the material (database, question, query and your review) and rewrite the query with an explanation.""",
-                        height=64)
-                if st.button("Review"):
-                    st.session_state.review_response = src3.review_query_results(
-                        src3.get_database_schema(),
-                        st.session_state.query,
-                        st.session_state.query_text,
-                        user_review)    
-                    with st.expander("Is it wrong or needs changes?", expanded=st.session_state.get("review_expander_open", True)):
+                with st.expander("Review results", expanded=st.session_state.get("review_expander_open", True)):
+                    user_review = st.text_area(
+                            "Is it wrong?",
+                            value="""Write here what is wrong with the result or how do you actually want it.""",
+                            height=64)
+                    if st.button("Review"):
+                        st.session_state.review_response = src3.review_query_results(
+                            src3.get_database_schema(),
+                            st.session_state.query,
+                            st.session_state.query_text,
+                            user_review)    
                         st.markdown(st.session_state.review_response.get("analysis", "Analysis section not found"))
                         st.markdown(st.session_state.review_response.get("explanation", "Explanation section not found"))
                         st.markdown("Copy the code below and paste in the Edit Query expander")
                         st.code(st.session_state.review_response.get("new_query", "New query not found"), language="sql")
-
+                    st.session_state.query_run = False
+                viz_query = st.text_area(
+                        "Do you want a visualization for this data?",
+                        value="""Write here what kind of data viz you want or let the AI Agent decide.""",
+                        height=64)
+                if st.button("Get Viz"):
+                    app_viz = src3.create_workflow_viz()
+                    df_head = src3.format_df(st.session_state.df, 3)
+                    viz_state = src3.process_viz(st.session_state.query, app_viz, st.session_state.llm, st.session_state.query_code, viz_query, df_head)
+                        # Extract clean code
+                    clean_code = src3.get_clean_viz_code(viz_state)
+                    
+                    # Display the code if desired
+                    with st.expander("View Visualization Code"):
+                        st.code(clean_code, language="python")
+                    
+                    # Execute the code (df should be available in this scope)
+                    namespace = {
+                        'df': st.session_state.df,
+                        'pd': pd,
+                        'plt': plt,
+                        'sns': sns,
+                        'np': np,
+                        'px': px
+                    }
+                    # Execute with the custom namespace
+                    exec(clean_code, namespace)
+                    # If a figure was created, display it using Streamlit
+                    if plt.get_fignums():
+                        fig = plt.gcf()  # Get current figure
+                        
+                        # Option 1: Set figure size before displaying
+                        fig.set_size_inches(10, 6)  # Width, height in inches
+                        
+                        # Option 2: Use Streamlit's width parameter
+                        st.pyplot(fig, use_container_width=True)  # Scales to container width
+                        
+                        # Option 3: Specify exact width
+                        # st.pyplot(fig, width=800)  # Specific width in pixels
+                        
+                        plt.close()  # Close the figure to free memory
                     
   
 
