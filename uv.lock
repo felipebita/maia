@@ -1,7 +1,0 @@
-version = 1
-requires-python = ">=3.10.0, <3.11"
-
-[[package]]
-name = "maia"
-version = "0.1.0"
-source = { virtual = "." }
