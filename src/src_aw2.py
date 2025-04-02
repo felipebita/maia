@@ -4,7 +4,7 @@ from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage
 
-
+llm = ChatOpenAI(model="gpt-4o-mini")
 
 class State(TypedDict):
     text: str
@@ -19,7 +19,7 @@ def classification_node(state: State):
         template="Classify the following text into one of the categories: News, Blog, Research, or Other.\n\nText:{text}\n\nCategory:"
     )
     message = HumanMessage(content=prompt.format(text=state["text"]))
-    classification = llm.predict_messages([message]).content.strip()
+    classification = llm.invoke([message]).content.strip()
     return {"classification": classification}
 
 
@@ -30,7 +30,7 @@ def entity_extraction_node(state: State):
         template="Extract all entities (Person, Organization, Location) from the following text. Provide the result as a comma-separated list.\n\nText:{text}\n\nEntities:"
     )
     message = HumanMessage(content=prompt.format(text=state["text"]))
-    entities = llm.predict_messages([message]).content.strip().split(", ")
+    entities = llm.invoke([message]).content.strip().split(", ")
     return {"entities": entities}
 
 
@@ -41,7 +41,7 @@ def summarization_node(state: State):
         template="Summarize the following text into a short sentence.\n\nText:{text}\n\nSummary:"
     )
     message = HumanMessage(content=prompt.format(text=state["text"]))
-    summary = llm.predict_messages([message]).content.strip()
+    summary = llm.invoke([message]).content.strip()
     return {"summary": summary}
 
 def create_workflow():

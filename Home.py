@@ -39,6 +39,9 @@ def main():
 
     **4. Sentinel:** 
         Sentinel employs artificial intelligence to identify and count objects in images and videos. Whether analyzing surveillance footage, conducting inventory checks, or monitoring wildlife, Sentinel provides accurate object detection and counting capabilities. Efficiently analyze visual data and extract valuable insights with Sentinel.
+    
+    **5. Agentic Workflows:** 
+        Streamline complex processes with intelligent, sequential decision-making. Automate text analysis, essay grading, and SQL-based data exploration with adaptive AI workflows designed for precision and efficiency.
     """
     )
 
