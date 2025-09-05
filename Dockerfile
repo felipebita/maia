@@ -1,33 +1,31 @@
-FROM ubuntu:22.04
+# Use the official Python image from the Docker Hub
+FROM python:3.10-slim
 
-# Copy application to the container
-COPY . /maia/
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Update the system and install Python
-RUN apt-get update && \
-    apt-get install -y python3 && \
-    apt-get clean
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    curl \
 
-# Install libgl1 for cv
-RUN apt-get install -y python3-opencv
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install pip    
-RUN apt-get install -y python3-pip
-
-# Upgrade pip
-RUN pip3 install --upgrade pip
-
-# Install requirements as root
-RUN pip3 install -r /maia/requirements.txt
-
-# Expose port
-EXPOSE 8080
-
-# Helth check
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
-
-# Create a new user 
+# Create a non-root user
 RUN useradd -ms /bin/bash appuser
+
+# Create app directory
+WORKDIR /maia
+
+# Copy requirements and install Python packages
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
+COPY . .
 
 # Change ownership of the /maia directory to appuser
 RUN chown -R appuser:appuser /maia
@@ -35,7 +33,11 @@ RUN chown -R appuser:appuser /maia
 # Switch to the new user
 USER appuser
 
-# Set the working directory
-WORKDIR /maia
+# Expose port
+EXPOSE 8080
 
+# Health check
+HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health
+
+# Run the application
 CMD ["streamlit", "run", "Home.py", "--server.port=8080", "--server.address=0.0.0.0"]
