@@ -17,3 +17,16 @@ Unleash creativity with our Image Creation feature. Transform ideas into visual 
 
 **3. Sentinel:**
 Sentinel employs artificial intelligence to identify and count objects in images and videos. Whether analyzing surveillance footage, conducting inventory checks, or monitoring wildlife, Sentinel provides accurate object detection and counting capabilities. Efficiently analyze visual data and extract valuable insights with Sentinel.
+
+## Running Locally
+
+To run this project locally, you need to have Docker and Docker Compose installed.
+
+1.  Create a `.env` file in the root of the project. You can use the `.env.example` as a template.
+2.  Build and run the application using Docker Compose:
+
+    ```bash
+    docker-compose up -d --build
+    ```
+
+3.  Access the application at [http://localhost:8501](http://localhost:8501).
