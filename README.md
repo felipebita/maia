@@ -15,8 +15,18 @@ Save time and enhance understanding with our Summarization feature. Our AI-power
 **3. Image Creation:**
 Unleash creativity with our Image Creation feature. Transform ideas into visual representations effortlessly! Whether designing presentations, social media posts, or enhancing content, our AI-driven tool has you covered.
 
-**4. Sentinel:**
+**3. Sentinel:**
 Sentinel employs artificial intelligence to identify and count objects in images and videos. Whether analyzing surveillance footage, conducting inventory checks, or monitoring wildlife, Sentinel provides accurate object detection and counting capabilities. Efficiently analyze visual data and extract valuable insights with Sentinel.
 
-**5. Agentic Workflows:** 
-Streamline complex processes with intelligent, sequential decision-making. Automate text analysis, essay grading, and SQL-based data exploration with adaptive AI workflows designed for precision and efficiency.
+## Running Locally
+
+To run this project locally, you need to have Docker and Docker Compose installed.
+
+1.  Create a `.env` file in the root of the project. You can use the `.env.example` as a template.
+2.  Build and run the application using Docker Compose:
+
+    ```bash
+    docker-compose up -d --build
+    ```
+
+3.  Access the application at [http://localhost:8501](http://localhost:8501).

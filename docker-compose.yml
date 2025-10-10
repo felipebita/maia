@@ -1,0 +1,8 @@
+services:
+  maia_app:
+    build: .
+    ports:
+      - "8501:8501"
+    command: streamlit run Home.py --server.port 8501 --server.address 0.0.0.0
+    env_file:
+      - .env
